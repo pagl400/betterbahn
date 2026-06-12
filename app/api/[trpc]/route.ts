@@ -1,9 +1,16 @@
 import { t } from "@/utils/trpc-init";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { analyzeJourney } from "../analyzeJourney";
+import { getBestPrices } from "../getBestPrices";
 import { getJourney } from "../getJourney/getJourney";
+import { searchLocations } from "../searchLocations";
 
-const appRouter = t.router({ getJourney, analyzeJourney });
+const appRouter = t.router({
+	getJourney,
+	analyzeJourney,
+	searchLocations,
+	getBestPrices,
+});
 
 export type AppRouter = typeof appRouter;
 

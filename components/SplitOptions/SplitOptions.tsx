@@ -1,6 +1,11 @@
 "use client";
 
-import type { SplitAnalysis } from "@/app/api/analyzeJourney";
+import type {
+	AlternativeRouteAnalysis,
+	ExtendedRouteAnalysis,
+	SplitAnalysis,
+} from "@/app/api/analyzeJourney";
+import { legIsFlixTrain } from "@/utils/deutschlandTicketUtils";
 import { formatDuration, formatTime } from "@/utils/formatUtils";
 import { getStationName } from "@/utils/journeyUtils";
 import { formatPriceDE } from "@/utils/priceUtils";
@@ -10,16 +15,27 @@ import { useUrlParams } from "../discount/useUrlParams";
 import { getOptionsToShow } from "./getOptionsToShow";
 import { Segment } from "./Segment";
 
-// Komponente zur Anzeige von Split-Ticket Optionen
+// Komponente zur Anzeige von Split-Ticket / „Verlängerte Route" / Alternativ-Optionen
 export const SplitOptions = ({
 	splitOptions,
 	originalJourney,
 	loadingSplits,
+	variant = "split",
+	maxDurationMs,
 }: {
-	splitOptions: SplitAnalysis[];
+	splitOptions: (
+		| SplitAnalysis
+		| ExtendedRouteAnalysis
+		| AlternativeRouteAnalysis
+	)[];
 	originalJourney: VendoJourney;
 	loadingSplits: unknown;
+	variant?: "split" | "extended" | "alternative";
+	/** Zeitlimit (Client-Filter); Optionen über dieser Gesamtdauer ausblenden. */
+	maxDurationMs?: number;
 }) => {
+	const isExtended = variant === "extended";
+	const isAlternative = variant === "alternative";
 	// State für erweiterte Optionsanzeige (erste Option standardmäßig erweitert)
 	const [expandedOption, setExpandedOption] = useState<number | null>(0);
 
@@ -29,13 +45,20 @@ export const SplitOptions = ({
 		splitOptions,
 		hasDeutschlandTicket,
 		originalJourney,
+		maxDurationMs,
 	});
 
 	if (loadingSplits) {
 		return (
 			<div className="text-center py-4">
 				<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600 mx-auto mb-2"></div>
-				<p className="text-yellow-700">Analysiere Split-Ticket Optionen...</p>
+				<p className="text-yellow-700">
+					{isAlternative
+						? "Analysiere alternative Bahnhöfe..."
+						: isExtended
+						? "Analysiere verlängerte Routen..."
+						: "Analysiere Split-Ticket Optionen..."}
+				</p>
 			</div>
 		);
 	}
@@ -44,7 +67,11 @@ export const SplitOptions = ({
 		return (
 			<div className="text-center py-4">
 				<p className="text-foreground/70">
-					Keine günstigeren Split-Ticket Optionen gefunden.
+					{isAlternative
+						? "Keine günstigeren Alternativbahnhöfe gefunden."
+						: isExtended
+						? "Keine günstigeren verlängerten Routen gefunden."
+						: "Keine günstigeren Split-Ticket Optionen gefunden."}
 				</p>
 				<p className="text-xs text-foreground/60 mt-1">
 					Die direkte Verbindung scheint die kostengünstigste Option zu sein.
@@ -58,6 +85,18 @@ export const SplitOptions = ({
 			<div className="space-y-4">
 				{optionsToDisplay.map((splitOption, splitIndex) => {
 					const splitPricing = splitOption.pricing;
+					const ext =
+						"kind" in splitOption && splitOption.kind === "extended"
+							? (splitOption as ExtendedRouteAnalysis & {
+									pricing: typeof splitPricing;
+							  })
+							: null;
+					const alt =
+						"kind" in splitOption && splitOption.kind === "alternative"
+							? (splitOption as AlternativeRouteAnalysis & {
+									pricing: typeof splitPricing;
+							  })
+							: null;
 
 					if (splitPricing.cannotShowPrice) {
 						return (
@@ -93,6 +132,12 @@ export const SplitOptions = ({
 						) +
 						(splitOption.segments.length - 1);
 
+					const allTrainLegs = splitOption.segments.flatMap((s) =>
+						s.legs.filter((l) => !l.walking && l.line)
+					);
+					const hasFlix = allTrainLegs.some((l) => legIsFlixTrain(l));
+					const hasDB = allTrainLegs.some((l) => !legIsFlixTrain(l));
+
 					return (
 						<div
 							key={splitIndex}
@@ -108,6 +153,42 @@ export const SplitOptions = ({
 									setExpandedOption(isExpanded ? null : splitIndex)
 								}
 							>
+								{ext && (
+									<div className="mb-3 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm">
+										<div className="font-semibold text-blue-800">
+											🎟️ Ticket {ext.ticketFrom.name ?? ext.ticketFrom.id} →{" "}
+											{ext.ticketTo.name ?? ext.ticketTo.id} kaufen, aber{" "}
+											{ext.travelFrom.name ?? ext.travelFrom.id} →{" "}
+											{ext.travelTo.name ?? ext.travelTo.id} fahren
+										</div>
+										<div className="mt-1 text-xs text-blue-700">
+											Bei Sparpreisen besteht Zugbindung. Nur gültig, wenn dein
+											Zug an {ext.travelFrom.name ?? ext.travelFrom.id} und{" "}
+											{ext.travelTo.name ?? ext.travelTo.id} hält. Früher
+											ein-/aussteigen ist erlaubt, ein Umstieg außerhalb der
+											Ticketstrecke nicht. Ohne Gewähr.
+										</div>
+									</div>
+								)}
+								{alt && (
+									<div className="mb-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm">
+										<div className="font-semibold text-green-800">
+											🚉 Du fährst {alt.travelFrom.name ?? alt.travelFrom.id} →{" "}
+											{alt.travelTo.name ?? alt.travelTo.id}
+										</div>
+										<div className="mt-1 text-xs text-green-700">
+											Andere Reise ab einem nahen Bahnhof
+											{typeof alt.startDistanceM === "number"
+												? ` (Start ca. ${Math.round(alt.startDistanceM / 100) / 10} km entfernt)`
+												: ""}
+											{typeof alt.endDistanceM === "number"
+												? ` (Ziel ca. ${Math.round(alt.endDistanceM / 100) / 10} km entfernt)`
+												: ""}
+											. Die Anreise zum Alternativbahnhof ist nicht enthalten.
+											Ohne Gewähr.
+										</div>
+									</div>
+								)}
 								<div className="flex items-start">
 									<div className="flex flex-col items-center mr-4 pt-1">
 										<svg
@@ -181,12 +262,21 @@ export const SplitOptions = ({
 												{totalChanges} Zwischenstopp
 												{totalChanges === 1 ? "" : "s"}
 											</span>
-											<span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-semibold text-red-700 border border-red-400 rounded-sm">
-												DB
-											</span>
+											{hasDB && (
+												<span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-semibold text-red-700 border border-red-400 rounded-sm">
+													DB
+												</span>
+											)}
+											{hasFlix && (
+												<span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-semibold text-purple-700 border border-purple-400 rounded-sm">
+													FlixTrain
+												</span>
+											)}
 										</div>
 
-										{splitOption.splitStations &&
+										{!ext &&
+											!alt &&
+											splitOption.splitStations &&
 											splitOption.splitStations.length > 0 && (
 												<div className="text-sm text-foreground/60 mt-1 pl-1">
 													Über:{" "}

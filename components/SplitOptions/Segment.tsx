@@ -4,13 +4,9 @@ import {
 	legIsFlixTrain,
 	isLegCoveredByDeutschlandTicket,
 } from "@/utils/deutschlandTicketUtils";
-import {
-	getJourneyLegsWithTransfers,
-	getLineInfoFromLeg,
-	getStationName,
-} from "@/utils/journeyUtils";
-import { formatTime } from "@/utils/formatUtils";
+import { getJourneyLegsWithTransfers } from "@/utils/journeyUtils";
 import { formatPriceDE } from "@/utils/priceUtils";
+import { LegList } from "../JourneyCard/LegList";
 
 export const Segment = ({
 	segment,
@@ -40,24 +36,9 @@ export const Segment = ({
 		);
 
 	return (
-		<div className="flex justify-between items-center p-2 rounded-md bg-background border border-foreground/20">
+		<div className="flex justify-between items-start gap-3 p-2 rounded-md bg-background border border-foreground/20">
 			<div className="flex-grow">
-				<div className="font-semibold text-sm text-foreground flex items-center gap-2">
-					{getJourneyLegsWithTransfers(segment).map((leg, legIndex) => (
-						<span key={legIndex} className="flex items-center gap-1">
-							{getLineInfoFromLeg(leg)}
-							{legIndex < getJourneyLegsWithTransfers(segment).length - 1 && (
-								<span className="text-foreground/50">→</span>
-							)}
-						</span>
-					))}
-				</div>
-				<div className="text-xs text-foreground/60 mt-1">
-					{getStationName(segment.legs[0].origin)} (
-					{formatTime(segment.legs[0].departure)}) →{" "}
-					{getStationName(segment.legs[segment.legs.length - 1].destination)} (
-					{formatTime(segment.legs[segment.legs.length - 1].arrival)})
-				</div>
+				<LegList journey={segment} />
 			</div>
 			<div className="text-right ml-4 flex-shrink-0 w-28">
 				<div className="font-bold text-md">

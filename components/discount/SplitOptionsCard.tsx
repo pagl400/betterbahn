@@ -6,12 +6,14 @@ interface Props {
 	splitOptions: SplitAnalysis[];
 	selectedJourney: VendoJourney;
 	loading: boolean;
+	maxDurationMs?: number;
 }
 
 export const SplitOptionsCardContent = ({
 	splitOptions,
 	selectedJourney,
 	loading,
+	maxDurationMs,
 }: Props) => {
 	if (loading) {
 		return (
@@ -41,6 +43,7 @@ export const SplitOptionsCardContent = ({
 			splitOptions={splitOptions}
 			originalJourney={selectedJourney}
 			loadingSplits={false}
+			maxDurationMs={maxDurationMs}
 		/>
 	);
 };

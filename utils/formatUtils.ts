@@ -32,6 +32,16 @@ export const formatDuration = (journey: VendoJourney) => {
 };
 
 /**
+ * Reisedauer in Millisekunden (erste Abfahrt bis letzte Ankunft).
+ */
+export const journeyDurationMs = (journey: VendoJourney): number | null => {
+	if (!journey?.legs || journey.legs.length === 0) return null;
+	const departure = journey.legs[0].departure;
+	const arrival = journey.legs[journey.legs.length - 1].arrival;
+	return arrival.getTime() - departure.getTime();
+};
+
+/**
  * Zählt Anzahl der Umstiege
  */
 export const getChangesCount = (journey: VendoJourney) => {

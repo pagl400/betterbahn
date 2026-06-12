@@ -1,167 +1,87 @@
-import type { SplitAnalysis } from "@/app/api/analyzeJourney";
+import type {
+	AlternativeRouteAnalysis,
+	ExtendedRouteAnalysis,
+	SplitAnalysis,
+} from "@/app/api/analyzeJourney";
 import {
 	isLegCoveredByDeutschlandTicket,
 	legIsFlixTrain,
+	segmentEffectivePrice,
 } from "@/utils/deutschlandTicketUtils";
 import { getJourneyLegsWithTransfers } from "@/utils/journeyUtils";
 import type { VendoJourney } from "@/utils/schemas";
 
-/** Berechne Split-Option Preisgestaltung mit Deutschland-Ticket Logik */
+const REGIONAL_PRODUCTS = [
+	"regional",
+	"regionalbahn",
+	"regionalexpress",
+	"sbahn",
+	"suburban",
+];
+
+/**
+ * Preis-/Ersparnis-Berechnung einer Option mit Deutschland-Ticket-Logik.
+ * Basis ist der Effektivpreis je Segment (D-Ticket-abgedeckter Nahverkehr = 0).
+ * Das Backend liefert nur noch echt günstigere Optionen – hier wird daher nur
+ * noch dargestellt, nicht mehr „Teilpreis" toleriert.
+ */
 export const calculateSplitOptionPricing = ({
 	splitOption,
 	hasDeutschlandTicket,
 	originalJourney,
 }: {
-	splitOption: SplitAnalysis;
+	splitOption: SplitAnalysis | ExtendedRouteAnalysis | AlternativeRouteAnalysis;
 	hasDeutschlandTicket: boolean;
 	originalJourney: VendoJourney;
 }) => {
-	let totalPrice: number | null = null; // null = unknown
+	const segments = splitOption.segments ?? [];
+	const effectivePrices = segments.map((s) =>
+		segmentEffectivePrice(s, hasDeutschlandTicket)
+	);
+	const allKnown =
+		effectivePrices.length > 0 && effectivePrices.every((p) => p !== null);
 
-	if (
-		splitOption.segments[0].price?.amount !== undefined &&
-		splitOption.segments[1].price?.amount !== undefined
-	) {
-		totalPrice =
-			splitOption.segments[0].price.amount +
-			splitOption.segments[1].price.amount;
-	}
+	const totalPrice = allKnown
+		? effectivePrices.reduce((sum, p) => sum + (p ?? 0), 0)
+		: null;
 
-	let savings: number | null = null;
+	const originalApiPrice = originalJourney.price?.amount ?? 0;
+	const savings =
+		totalPrice !== null ? Math.max(0, originalApiPrice - totalPrice) : null;
 
-	if (totalPrice !== null && originalJourney.price?.amount !== undefined) {
-		savings = originalJourney.price.amount - totalPrice;
-	}
+	const hasRegionalTrains = segments.some((segment) =>
+		getJourneyLegsWithTransfers(segment).some((leg) =>
+			REGIONAL_PRODUCTS.includes(leg.line?.product?.toLowerCase() || "")
+		)
+	);
+	const hasFlixTrains = segments.some((segment) =>
+		getJourneyLegsWithTransfers(segment).some((leg) => legIsFlixTrain(leg))
+	);
 
-	if (!splitOption || !splitOption.segments) {
-		return {
-			...splitOption,
-			isFullyCovered: false,
-			hasRegionalTrains: false,
-			cannotShowPrice: false,
-			hasPartialPricing: false,
-			segmentsWithoutPricing: [] as number[],
-			adjustedTotalPrice: totalPrice,
-			adjustedSavings: savings,
-			hasFlixTrains: null,
-		};
-	}
-
-	// Überprüfe ob Split-Option Regionalzüge enthält
-	const hasRegionalTrains = splitOption.segments.some((segment) => {
-		const trainLegs = getJourneyLegsWithTransfers(segment);
-		return trainLegs.some((leg) => {
-			const product = leg.line?.product?.toLowerCase() || "";
-			const regionalProducts = [
-				"regional",
-				"regionalbahn",
-				"regionalexpress",
-				"sbahn",
-				"suburban",
-			];
-			return regionalProducts.includes(product);
-		});
-	});
-
-	const hasFlixTrains = splitOption.segments.some((segment) => {
-		const trainLegs = getJourneyLegsWithTransfers(segment);
-		return trainLegs.some((leg) => legIsFlixTrain(leg));
-	});
-
-	let cannotShowPrice: boolean;
-	let hasPartialPricing: boolean;
-	let segmentsWithoutPricing: number[] = [];
-	let allSegmentsCovered: boolean;
-
-	allSegmentsCovered = splitOption.segments.every((segment) => {
-		const trainLegs = getJourneyLegsWithTransfers(segment);
-		return trainLegs.every((leg) =>
-			isLegCoveredByDeutschlandTicket(leg, hasDeutschlandTicket)
+	const allSegmentsCovered =
+		segments.length > 0 &&
+		segments.every((segment) =>
+			getJourneyLegsWithTransfers(segment).every((leg) =>
+				isLegCoveredByDeutschlandTicket(leg, hasDeutschlandTicket)
+			)
 		);
-	});
+	const isFullyCovered = allSegmentsCovered && hasDeutschlandTicket;
 
-	if (hasDeutschlandTicket) {
-		cannotShowPrice = false;
-		hasPartialPricing = false;
-	} else {
-		let segmentsWithPrice = 0;
-		let totalSegments = splitOption.segments.length;
-
-		splitOption.segments.forEach((segment, index) => {
-			const hasPrice = segment.price;
-
-			const segmentHasFlixTrain = getJourneyLegsWithTransfers(segment).some(
-				(leg) => legIsFlixTrain(leg)
-			);
-
-			// Consider a segment as having no pricing if:
-			// 1. It has no price data, OR
-			// 2. It contains FlixTrain services (which we can't price)
-			if (!hasPrice || segmentHasFlixTrain) {
-				segmentsWithoutPricing.push(index);
-			} else {
-				segmentsWithPrice++;
-			}
-		});
-
-		cannotShowPrice = segmentsWithPrice === 0;
-		hasPartialPricing =
-			segmentsWithPrice > 0 && segmentsWithPrice < totalSegments;
-	}
-
-	let adjustedTotalPrice = totalPrice;
-	let adjustedSavings = savings;
-
-	if (originalJourney) {
-		// The API already returns prices with BahnCard discounts applied
-		const originalJourneyApiPrice = originalJourney.price?.amount || 0;
-
-		if (hasDeutschlandTicket) {
-			let totalUncoveredPrice = 0;
-
-			for (const segment of splitOption.segments) {
-				const trainLegs = getJourneyLegsWithTransfers(segment);
-				const segmentCovered = trainLegs.every((leg) =>
-					isLegCoveredByDeutschlandTicket(leg, hasDeutschlandTicket)
-				);
-				const segmentPrice = segment.price?.amount || 0;
-
-				if (!segmentCovered && segmentPrice > 0) {
-					totalUncoveredPrice += segmentPrice;
-				}
-			}
-
-			adjustedTotalPrice = totalUncoveredPrice;
-		} else if (hasPartialPricing) {
-			// For partial pricing, only sum up segments with available pricing
-			let partialTotalPrice = 0;
-
-			splitOption.segments.forEach((segment, index) => {
-				if (!segmentsWithoutPricing.includes(index)) {
-					partialTotalPrice += segment.price?.amount || 0;
-				}
-			});
-
-			adjustedTotalPrice = partialTotalPrice;
-		}
-
-		if (adjustedTotalPrice !== null) {
-			adjustedSavings = Math.max(
-				0,
-				originalJourneyApiPrice - adjustedTotalPrice
-			);
-		}
-	}
+	// Segmente ohne Effektivpreis (sollten dank Backend-Filter praktisch nicht
+	// mehr vorkommen) – nur für die Detail-Anzeige.
+	const segmentsWithoutPricing = effectivePrices
+		.map((p, i) => (p === null ? i : -1))
+		.filter((i) => i >= 0);
 
 	return {
 		...splitOption,
-		isFullyCovered: allSegmentsCovered && hasDeutschlandTicket,
+		isFullyCovered,
 		hasRegionalTrains,
 		hasFlixTrains,
-		cannotShowPrice,
-		hasPartialPricing,
+		cannotShowPrice: totalPrice === null && !isFullyCovered,
+		hasPartialPricing: false,
 		segmentsWithoutPricing,
-		adjustedTotalPrice,
-		adjustedSavings,
+		adjustedTotalPrice: totalPrice,
+		adjustedSavings: savings,
 	};
 };

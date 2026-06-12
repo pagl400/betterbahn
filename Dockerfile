@@ -12,6 +12,10 @@ WORKDIR /app
 ENV TZ=Europe/Berlin
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Subscriptions (SSE) übertragen die ausgewählte Verbindung als Query-Parameter;
+# bei mehrteiligen Reisen überschreitet das die Standard-Header-Grenze (16 KB)
+# und führt sonst zu HTTP 431.
+ENV NODE_OPTIONS=--max-http-header-size=131072
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 

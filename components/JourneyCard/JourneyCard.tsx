@@ -1,118 +1,106 @@
 "use client";
 
-import { formatTime } from "@/utils/formatUtils";
+import { legIsFlixTrain } from "@/utils/deutschlandTicketUtils";
+import { formatDuration, formatTime } from "@/utils/formatUtils";
 import { formatPriceDE } from "@/utils/priceUtils";
 import type { VendoJourney } from "@/utils/schemas";
-import { getTransferStations } from "./getTransferStations";
-import { JourneyDuration } from "./JourneyDuration";
-import { LegDetails } from "./LegDetails";
-import { useUrlParams } from "../discount/useUrlParams";
+import { useState } from "react";
+import { LegList } from "./LegList";
 
 export const JourneyCard = ({
 	journey,
 	isSelected = false,
+	isFastest = false,
 	onClick,
 }: {
 	journey: VendoJourney;
 	isSelected?: boolean;
+	isFastest?: boolean;
 	onClick: () => void;
 }) => {
+	const [expanded, setExpanded] = useState(false);
+
 	const firstLeg = journey.legs.at(0);
 	const lastLeg = journey.legs.at(-1);
-	const nonWalkingLegs = journey.legs.filter((leg) => !leg.walking);
-	const transferCountWithoutWalking = Math.max(0, nonWalkingLegs.length - 1);
-	const transferStationsWithoutWalking = getTransferStations(nonWalkingLegs);
-	const { travelClass } = useUrlParams();
-
-	const priceDisplay =
-		journey.price?.amount === undefined
-			? "Preis auf Anfrage"
-			: formatPriceDE(journey.price.amount);
+	const trainLegs = journey.legs.filter((leg) => !leg.walking && leg.line);
+	const transfers = Math.max(0, trainLegs.length - 1);
+	const price = journey.price?.amount;
 
 	return (
 		<div
-			className={`border rounded-lg p-4 transition-all duration-200 bg-background border-foreground/30 ${
-				isSelected
-					? "shadow-md"
-					: "hover:shadow-md hover:bg-foreground/5 cursor-pointer"
-			}`}
 			onClick={onClick}
+			className={`rounded-lg border p-4 cursor-pointer transition-all ${
+				isSelected
+					? "border-primary ring-2 ring-primary/40 bg-primary/5"
+					: "border-foreground/20 hover:border-foreground/40 hover:bg-foreground/5"
+			}`}
 		>
-			{/* Journey Header - Similar to SplitOptions */}
-			<div className="flex justify-between">
-				<div>
-					<span className="text-sm text-foreground/60">Verbindung:</span>
-					<span className="text-lg font-bold text-blue-600 ml-2">
-						{formatTime(firstLeg?.departure)} → {formatTime(lastLeg?.arrival)}
-					</span>
-					{transferCountWithoutWalking > 0 &&
-						transferStationsWithoutWalking.length > 0 && (
-							<span className="ml-2 text-sm text-green-600 font-medium">
-								🚆 via {transferStationsWithoutWalking.join(", ")}
-							</span>
-						)}
+			<div className="flex items-center justify-between gap-4">
+				<div className="flex items-center gap-3">
+					<div className="flex items-baseline gap-2">
+						<span className="text-2xl font-bold tabular-nums">
+							{formatTime(firstLeg?.departure)}
+						</span>
+						<span className="text-foreground/40">→</span>
+						<span className="text-2xl font-bold tabular-nums">
+							{formatTime(lastLeg?.arrival)}
+						</span>
+					</div>
+					{isFastest && (
+						<span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 text-xs font-bold whitespace-nowrap">
+							⚡ Schnellste
+						</span>
+					)}
 				</div>
-				<div className="text-right">
-					<div className="text-sm text-foreground/60">
-						<JourneyDuration journey={journey} />
-					</div>
-					<div className="text-lg font-bold text-foreground">
-						{priceDisplay}
-					</div>
+				<div className="text-2xl font-bold text-foreground tabular-nums">
+					{price === undefined ? "–" : formatPriceDE(price)}
 				</div>
 			</div>
 
-			{/* Route Summary */}
-			<div className="text-sm text-foreground/70 mb-2">
-				{firstLeg?.origin?.name || "Unbekannt"} →{" "}
-				{lastLeg?.destination?.name || "Unbekannt"}
-				{transferCountWithoutWalking > 0 && (
-					<span className="ml-2 text-xs text-orange-600">
-						({transferCountWithoutWalking} Umstieg
-						{transferCountWithoutWalking > 1 ? "e" : ""})
-					</span>
-				)}
-			</div>
-
-			{/* Journey Legs - Similar to SplitOptions segments */}
-			<div className="text-xs text-foreground/60 space-y-3 mb-3">
-				{journey.legs
-					.filter((leg) => !leg.walking)
-					.map((leg, legIndex) => (
-						<LegDetails key={legIndex} leg={leg} legIndex={legIndex} />
+			<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-foreground/70">
+				<span className="font-medium">{formatDuration(journey)}</span>
+				<span className="text-foreground/30">·</span>
+				<span>
+					{transfers === 0
+						? "direkt"
+						: `${transfers} Umstieg${transfers > 1 ? "e" : ""}`}
+				</span>
+				<span className="flex flex-wrap gap-1">
+					{trainLegs.map((leg, i) => (
+						<span
+							key={i}
+							className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+								legIsFlixTrain(leg)
+									? "bg-purple-500/15 text-purple-600"
+									: "bg-primary/15 text-primary"
+							}`}
+						>
+							{leg.line?.name}
+						</span>
 					))}
+				</span>
 			</div>
 
-			{/* Journey Summary - Similar to SplitOptions pricing summary */}
-			<div className="border-t pt-3 flex justify-between items-center">
-				<div>
-					<div className="text-sm font-medium text-foreground/80">
-						Gesamt: {priceDisplay}
-					</div>
-					<div className="text-xs text-foreground/70">
-						{travelClass === "1" ? "1. Klasse" : "2. Klasse"}
-						{transferCountWithoutWalking > 0 &&
-							transferStationsWithoutWalking.length > 0 && (
-								<span className="ml-2">
-									• {transferCountWithoutWalking} Umstieg
-									{transferCountWithoutWalking > 1 ? "e" : ""}
-								</span>
-							)}
-					</div>
-				</div>
-				<div className="text-right">
-					<div className="text-xs text-foreground/60">
-						<JourneyDuration journey={journey} />
-					</div>
-					<div className="text-xs text-blue-600">
-						{firstLeg?.departure.toLocaleDateString("de-DE", {
-							day: "2-digit",
-							month: "2-digit",
-						})}{" "}
-						• {formatTime(firstLeg?.departure)}-{formatTime(lastLeg?.arrival)}
-					</div>
-				</div>
+			<div className="mt-1 text-xs text-foreground/50">
+				{firstLeg?.origin?.name ?? "?"} → {lastLeg?.destination?.name ?? "?"}
 			</div>
+
+			<button
+				type="button"
+				onClick={(e) => {
+					e.stopPropagation();
+					setExpanded((v) => !v);
+				}}
+				className="mt-2 text-xs text-primary hover:underline"
+			>
+				{expanded ? "Details ausblenden ▴" : "Details anzeigen ▾"}
+			</button>
+
+			{expanded && (
+				<div className="mt-2 pt-2 border-t border-foreground/15">
+					<LegList journey={journey} />
+				</div>
+			)}
 		</div>
 	);
 };

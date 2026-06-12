@@ -26,6 +26,9 @@ export type VendoPrice = z.infer<typeof vendoPriceSchema>;
 
 const vendoLineSchema = z.object({
 	name: z.string(),
+	// Zugnummer (z.B. "545" für ICE 545) – wird für das Wiedererkennen des
+	// echten Zuges bei der „Verlängerte Route"-Suche benötigt.
+	fahrtNr: z.string().optional(),
 	product: z.string().optional(),
 	productName: z.string().optional(),
 	mode: z.string().or(z.object()).optional(),
@@ -62,6 +65,10 @@ const vendoLegSchema = z.object({
 	line: vendoLineSchema.optional(),
 	arrival: dateOrDateStringSchema,
 	mode: z.string().optional(),
+	// tripId/direction werden für die „Verlängerte Route"-Suche gebraucht
+	// (Zuglauf via trip() abfragen). Optional, damit Walking-Legs gültig bleiben.
+	tripId: z.string().nullable().optional(),
+	direction: z.string().nullable().optional(),
 	walking: z.unknown(),
 	departurePlatform: z.string().nullable().optional(),
 	arrivalPlatform: z.string().nullable().optional(),
@@ -88,3 +95,24 @@ export const vbidSchema = z.object({
 });
 
 export type VbidSchema = z.infer<typeof vbidSchema>;
+
+/** Ergebnis der Bahnhofs-Suche (Autocomplete). */
+export const vendoLocationResultSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	latitude: z.number().optional(),
+	longitude: z.number().optional(),
+});
+
+export type VendoLocationResult = z.infer<typeof vendoLocationResultSchema>;
+
+/** Eintrag der Tagesbestpreis-Suche (leichtgewichtig, für die Timeline). */
+export const bestPriceEntrySchema = z.object({
+	departure: dateOrDateStringSchema,
+	arrival: dateOrDateStringSchema,
+	price: z.number(),
+	lineNames: z.array(z.string()),
+	transfers: z.int(),
+});
+
+export type BestPriceEntry = z.infer<typeof bestPriceEntrySchema>;

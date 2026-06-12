@@ -1,5 +1,5 @@
-import type { VendoLeg } from "@/utils/schemas";
-import { getStationName } from "./journeyUtils";
+import type { VendoJourney, VendoLeg } from "@/utils/schemas";
+import { getJourneyLegsWithTransfers, getStationName } from "./journeyUtils";
 
 // Definiere spezifische IC/ICE-Strecken, die vom Deutschland-Ticket abgedeckt werden
 const deutschlandTicketICRoutes = [
@@ -145,4 +145,23 @@ export const isLegCoveredByDeutschlandTicket = (
 		!["nationalexpress", "national"].includes(product) ||
 		isICRouteCoveredByDeutschlandTicket(leg)
 	);
+};
+
+/**
+ * Effektiver Preis eines Reise-Segments für den Vergleich:
+ * - bekannter Preis → dieser Wert;
+ * - kein Preis, aber alle Zug-Legs vom Deutschland-Ticket abgedeckt → 0 (gratis);
+ * - sonst → null (unbekannt ⇒ Segment disqualifiziert die Option als „günstiger").
+ */
+export const segmentEffectivePrice = (
+	segment: VendoJourney,
+	hasDeutschlandTicket: boolean
+): number | null => {
+	if (segment.price?.amount !== undefined) return segment.price.amount;
+	const trainLegs = getJourneyLegsWithTransfers(segment);
+	if (trainLegs.length === 0) return null;
+	const allCovered = trainLegs.every((leg) =>
+		isLegCoveredByDeutschlandTicket(leg, hasDeutschlandTicket)
+	);
+	return allCovered ? 0 : null;
 };

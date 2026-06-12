@@ -1,4 +1,13 @@
-# BetterBahn
+# BetterBahn (Fork)
+
+> **🍴 Fork-Hinweis:** Dies ist ein **Fork von Better Bahn**. Das Originalprojekt
+> findest du unter **https://github.com/BetterBahn/betterbahn** – alle Credits für
+> die ursprüngliche App gehen an die dortigen Autor:innen.
+>
+> Dieser Fork erweitert Better Bahn u.a. um: direkte Von/Nach-Suche mit
+> Bahnhofs-Autocomplete, Tagesbestpreis-Übersicht (Timeline), alternative
+> Start-/Zielbahnhöfe, „Verlängerte Route"-Tickets (Overshoot), strengeres
+> Split-Filtern (inkl. Deutschlandticket-Logik) sowie ein überarbeitetes UI.
 
 BetterBahn is a web app for finding the best train journeys in Germany. While split ticketing is supported to help save money, it is rather the exception. The app will be extended with many more features in the future.
 You can find out more about the project on our [website](https://betterbahn.de).
